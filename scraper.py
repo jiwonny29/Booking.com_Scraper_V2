@@ -48,6 +48,21 @@ def scroll_to_bottom(driver):
             break
         last_height = new_height
 
+# Function to click the 'Load more results' button if it exists
+def click_load_more_results_button(driver):
+    try:
+        load_more_button = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Load more results')]"))
+        )
+        load_more_button.click()
+        print(Fore.CYAN + "'Load more results' button clicked.")
+        time.sleep(5)  # Wait for the new results to load
+        return True
+    except Exception as e:
+        print(Fore.RED + f"Error clicking 'Load more results' button: {e}")
+        return False
+
+
 # Function to scrape hotel information from the page
 def scrape_page(driver, scraped_names):
     hotels = []
@@ -64,7 +79,7 @@ def scrape_page(driver, scraped_names):
             url = hotel.find('a', attrs={'data-testid': 'title-link'})['href']
             # Convert relative path to absolute path if not already absolute
             if not url.startswith("http"):
-                url = "https://www.booking.com" + url
+                url = "https://www.booking.com" + url  # URL 절대 경로로 변환
         except TypeError:
             url = 'N/A'
         
@@ -131,13 +146,13 @@ def scrape_all_pages(driver, base_url, max_hotels):
         while retry_count < max_retries:
             try:
                 # Check if the "Load more results" button exists
-                if len(driver.find_elements(By.XPATH, "//button[contains(@class, 'dba1b3bddf')]")) == 0:
+                if len(driver.find_elements(By.XPATH, "//button[contains(text(), 'Load more results')]")) == 0:
                     print(Fore.RED + "No 'Load more results' button found. Ending scrape.")
                     return all_hotels
                 
                 # Re-find the "Load more results" button before each click
                 load_more_button = WebDriverWait(driver, 10).until(
-                    EC.element_to_be_clickable((By.XPATH, "//button[contains(@class, 'dba1b3bddf') and contains(@class, 'e99c25fd33') and contains(@class, 'ea757ee64b') and contains(@class, 'f1c8772a7d') and contains(@class, 'ea220f5cdc') and contains(@class, 'f870aa1234')]"))
+                    EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Load more results')]"))
                 )
                 load_more_button.click()
                 print(Fore.CYAN + "Load more button clicked.")
@@ -150,12 +165,8 @@ def scrape_all_pages(driver, base_url, max_hotels):
                     print(Fore.YELLOW + f"Retrying... ({retry_count}/{max_retries})")
                     time.sleep(30)  # Wait for 30 seconds before retrying
                 else:
-                    user_input = input(Fore.RED + "Max retries reached. Do you want to retry? (yes/no): ").strip().lower()
-                    if user_input == 'yes':
-                        retry_count = 0  # Reset retry count if user wants to retry
-                    else:
-                        print(Fore.RED + "Stopping scrape.")
-                        return all_hotels
+                    print(Fore.RED + "Stopping scrape.")
+                    return all_hotels
         
         cooldown_attempts = 0  # Reset cooldown attempts after successful scrape
         time.sleep(1)  # A bit of delay to avoid overloading the server
