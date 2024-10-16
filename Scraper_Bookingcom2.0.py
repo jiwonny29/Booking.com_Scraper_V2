@@ -24,7 +24,7 @@ def initialize_driver():
     # Initialize and run Firefox WebDriver
     driver = webdriver.Firefox(service=Service(GeckoDriverManager().install()), options=firefox_options)
     return driver
-    
+
 # Function to clear the screen
 def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
@@ -36,13 +36,13 @@ def print_header():
     print(Style.BRIGHT + Fore.MAGENTA + " " * 10 + "🌟 Booking.com Hotel Scraper 🌟")
     print(Style.BRIGHT + Fore.CYAN + "=" * 50 + "\n")
 
-# Function to scroll down the page until the end
+# Function to scroll down the page until the end or for a set number of scrolls
 def scroll_to_bottom(driver):
     last_height = driver.execute_script("return document.body.scrollHeight")
     
     while True:
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-        time.sleep(5)
+        time.sleep(10)  # Wait for more hotels to load
         new_height = driver.execute_script("return document.body.scrollHeight")
         if new_height == last_height:
             break
@@ -62,8 +62,9 @@ def scrape_page(driver, scraped_names):
         try:
             # Extract the hotel detail page URL (relative path)
             url = hotel.find('a', attrs={'data-testid': 'title-link'})['href']
-            # Convert relative path to absolute path
-            url = url
+            # Convert relative path to absolute path if not already absolute
+            if not url.startswith("http"):
+                url = "https://www.booking.com" + url
         except TypeError:
             url = 'N/A'
         
@@ -78,7 +79,7 @@ def scrape_page(driver, scraped_names):
 # Function to estimate remaining time
 def estimate_remaining_time(start_time, total_scraped, total_needed):
     elapsed_time = datetime.now() - start_time
-    time_per_hotel = elapsed_time.total_seconds() / total_scraped
+    time_per_hotel = elapsed_time.total_seconds() / total_scraped if total_scraped > 0 else 0
     remaining_hotels = total_needed - total_scraped
     remaining_time = remaining_hotels * time_per_hotel
     return remaining_time
@@ -108,7 +109,7 @@ def scrape_all_pages(driver, base_url, max_hotels):
                     print(Fore.YELLOW + f"Cooldown: {i} seconds remaining...", end='\r')
                     time.sleep(1)
                 cooldown_attempts += 1
-                continue
+                continue  # Retry scraping the same page after cooldown
             else:
                 print(Fore.RED + "No more hotels found after cooldown, stopping scrape.")
                 break
@@ -124,6 +125,40 @@ def scrape_all_pages(driver, base_url, max_hotels):
         if total_hotels >= max_hotels:
             print(Fore.GREEN + f"Reached the maximum limit of {max_hotels} unique hotels. Stopping scrape.")
             break
+
+        retry_count = 0
+        max_retries = 5
+        while retry_count < max_retries:
+            try:
+                # Check if the "Load more results" button exists
+                if len(driver.find_elements(By.XPATH, "//button[contains(@class, 'dba1b3bddf')]")) == 0:
+                    print(Fore.RED + "No 'Load more results' button found. Ending scrape.")
+                    return all_hotels
+                
+                # Re-find the "Load more results" button before each click
+                load_more_button = WebDriverWait(driver, 10).until(
+                    EC.element_to_be_clickable((By.XPATH, "//button[contains(@class, 'dba1b3bddf') and contains(@class, 'e99c25fd33') and contains(@class, 'ea757ee64b') and contains(@class, 'f1c8772a7d') and contains(@class, 'ea220f5cdc') and contains(@class, 'f870aa1234')]"))
+                )
+                load_more_button.click()
+                print(Fore.CYAN + "Load more button clicked.")
+                time.sleep(5)  # Give time for the next set of results to load
+                break  # Exit the retry loop if successful
+            except Exception as e:
+                retry_count += 1
+                print(Fore.RED + f"Error while trying to click 'Load more results' button: {e}")
+                if retry_count < max_retries:
+                    print(Fore.YELLOW + f"Retrying... ({retry_count}/{max_retries})")
+                    time.sleep(30)  # Wait for 30 seconds before retrying
+                else:
+                    user_input = input(Fore.RED + "Max retries reached. Do you want to retry? (yes/no): ").strip().lower()
+                    if user_input == 'yes':
+                        retry_count = 0  # Reset retry count if user wants to retry
+                    else:
+                        print(Fore.RED + "Stopping scrape.")
+                        return all_hotels
+        
+        cooldown_attempts = 0  # Reset cooldown attempts after successful scrape
+        time.sleep(1)  # A bit of delay to avoid overloading the server
 
     return all_hotels
 
